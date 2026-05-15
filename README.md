@@ -2,6 +2,8 @@
 
 Static helper to build `claude-cli://open?...` deeplinks for [Claude Code](https://code.claude.com/docs/en/deep-links).
 
+**Live demo:** https://prespic.github.io/claude-deeplink/
+
 Single HTML file. No build, no install. Open `index.html` locally or host on GitHub Pages.
 
 ## Features
@@ -12,7 +14,7 @@ Single HTML file. No build, no install. Open `index.html` locally or host on Git
 - "Open" button to test directly
 - History stored in `localStorage` (last 20)
 - Light / dark theme toggle
-- Built with [act-design-system](https://gitea.internal.ceosdata.com/asysta/act-design-system) Tier 0 (Tailwind v4 browser + DaisyUI v5, CDN-only)
+- Tailwind v4 browser + DaisyUI v5 via CDN, no build step
 
 ## Hosting on GitHub Pages
 
