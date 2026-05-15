@@ -1,0 +1,407 @@
+<!doctype html>
+<html lang="cs" data-theme="light">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Claude Code deeplink builder</title>
+
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/daisyui@5/daisyui.css" />
+
+    <style type="text/tailwindcss">
+      @theme {
+        --color-primary: #ef4444;
+        --color-primary-content: #ffffff;
+        --color-secondary: #3b82f6;
+        --color-accent: #facc15;
+        --color-accent-content: #0f172a;
+        --color-base-100: #fafafa;
+        --color-base-200: #f1f5f9;
+        --color-base-300: #e2e8f0;
+        --color-base-content: #0f172a;
+        --color-success: #22c55e;
+        --color-warning: #f97316;
+        --color-error: #ef4444;
+        --color-info: #3b82f6;
+
+        --radius-md: 0.5rem;
+        --font-sans: -apple-system, "Inter", "Segoe UI", system-ui, sans-serif;
+        --font-mono: "JetBrains Mono", "Cascadia Code", "Fira Code", Menlo, monospace;
+      }
+    </style>
+
+    <style>
+      :root[data-theme="dark"] {
+        --color-primary: #f87171;
+        --color-secondary: #60a5fa;
+        --color-accent: #fde047;
+        --color-base-100: #0f172a;
+        --color-base-200: #1e293b;
+        --color-base-300: #334155;
+        --color-base-content: #f1f5f9;
+        --color-success: #4ade80;
+        --color-warning: #fb923c;
+        --color-error: #f87171;
+      }
+    </style>
+  </head>
+
+  <body class="bg-base-100 text-base-content font-sans min-h-screen">
+    <header class="navbar bg-base-200 px-6 sticky top-0 z-10 shadow-sm">
+      <div class="flex-1 flex items-center gap-3">
+        <div class="w-8 h-8 rounded-md bg-primary text-primary-content grid place-items-center font-bold">C</div>
+        <div>
+          <div class="font-semibold">Claude Code deeplink builder</div>
+          <div class="text-xs opacity-60">Sestav <code class="font-mono">claude-cli://</code> URL</div>
+        </div>
+      </div>
+      <button class="btn btn-sm btn-ghost" onclick="toggleTheme()">
+        <span data-theme-label>🌙</span>
+      </button>
+    </header>
+
+    <main class="max-w-4xl mx-auto p-6 space-y-8">
+      <!-- Form -->
+      <section class="card bg-base-200 p-6 space-y-4">
+        <h2 class="text-xl font-semibold">Parametry</h2>
+
+        <div>
+          <label class="label-text font-medium">Cíl pracovního adresáře</label>
+          <div class="flex flex-wrap gap-4 mt-2">
+            <label class="cursor-pointer flex items-center gap-2">
+              <input type="radio" name="target" value="none" class="radio radio-sm" />
+              <span class="text-sm">Nic (poslední / home)</span>
+            </label>
+            <label class="cursor-pointer flex items-center gap-2">
+              <input type="radio" name="target" value="repo" class="radio radio-sm" checked />
+              <span class="text-sm"><code>repo</code> (Claude najde lokální klon)</span>
+            </label>
+            <label class="cursor-pointer flex items-center gap-2">
+              <input type="radio" name="target" value="cwd" class="radio radio-sm" />
+              <span class="text-sm"><code>cwd</code> (absolutní cesta)</span>
+            </label>
+          </div>
+        </div>
+
+        <label class="form-control" data-field="repo">
+          <span class="label-text mb-1"><code>repo</code> — GitHub slug</span>
+          <input
+            type="text"
+            id="repo"
+            placeholder="owner/name (např. asysta/ceos-cmd)"
+            class="input input-bordered font-mono"
+          />
+          <span class="text-xs opacity-60 mt-1">
+            Claude si pamatuje cesty repů, ve kterých jsi už pustil <code>claude</code>.
+            Vybere naposledy použitou. Bez záznamu → otevře se home directory.
+          </span>
+        </label>
+
+        <label class="form-control hidden" data-field="cwd">
+          <span class="label-text mb-1"><code>cwd</code> — absolutní cesta</span>
+          <input
+            type="text"
+            id="cwd"
+            placeholder="C:\git\ceos-cmd-ai  nebo  /home/user/project"
+            class="input input-bordered font-mono"
+          />
+          <span class="text-xs opacity-60 mt-1">Forward i back slashes jsou OK (backslash se zakóduje).</span>
+        </label>
+
+        <label class="form-control">
+          <span class="label-text mb-1 flex justify-between">
+            <span><code>q</code> — prompt</span>
+            <span class="text-xs opacity-60"><span id="char-count">0</span> / 5000</span>
+          </span>
+          <textarea
+            id="prompt"
+            rows="5"
+            placeholder="Slash command (např. /review) nebo libovolný text..."
+            class="textarea textarea-bordered font-mono text-sm"
+          ></textarea>
+          <span class="text-xs opacity-60 mt-1">
+            Začni <code>/</code> pro slash command (např. <code>/init</code>, <code>/review</code>).
+            Po otevření Claude Code musíš stisknout Enter — bezpečnostní pojistka.
+          </span>
+        </label>
+
+        <div class="flex flex-wrap gap-2 pt-2">
+          <button class="btn btn-ghost btn-sm" onclick="loadSample('review')">Vzorek: /review</button>
+          <button class="btn btn-ghost btn-sm" onclick="loadSample('status')">Vzorek: git status</button>
+          <button class="btn btn-ghost btn-sm" onclick="loadSample('multi')">Vzorek: víceřádkový</button>
+          <button class="btn btn-ghost btn-sm ml-auto" onclick="resetForm()">Reset</button>
+        </div>
+      </section>
+
+      <!-- Output -->
+      <section class="card bg-base-200 p-6 space-y-4">
+        <h2 class="text-xl font-semibold">Výsledná URL</h2>
+
+        <div class="bg-base-100 border border-base-300 rounded-md p-3 font-mono text-sm break-all min-h-[3rem]" id="url-output">
+          <span class="opacity-50">— vyplň formulář —</span>
+        </div>
+
+        <div class="flex flex-wrap gap-2">
+          <button class="btn btn-primary" id="copy-btn" onclick="copyUrl()" disabled>
+            Zkopírovat URL
+          </button>
+          <a class="btn btn-secondary" id="open-link" href="#" target="_self" aria-disabled="true">
+            Otevřít v Claude Code
+          </a>
+          <button class="btn btn-ghost" onclick="copyHtmlAnchor()" id="copy-html-btn" disabled>
+            Zkopírovat &lt;a href&gt;
+          </button>
+        </div>
+
+        <details class="text-sm">
+          <summary class="cursor-pointer opacity-70 hover:opacity-100">HTML anchor (pro vložení do stránky)</summary>
+          <pre class="bg-base-100 border border-base-300 rounded-md p-3 mt-2 font-mono text-xs overflow-x-auto" id="html-anchor">—</pre>
+        </details>
+
+        <div class="alert alert-info text-sm">
+          <span>
+            <strong>Tip:</strong> GitHub Markdown <code>claude-cli://</code> linky strippuje.
+            Workaround — vlož URL do code blocku (rendered as plain text), uživatel ji zkopíruje a otevře.
+          </span>
+        </div>
+      </section>
+
+      <!-- History -->
+      <section class="card bg-base-200 p-6 space-y-3">
+        <div class="flex items-center justify-between">
+          <h2 class="text-xl font-semibold">Historie</h2>
+          <button class="btn btn-ghost btn-xs" onclick="clearHistory()">Vyčistit</button>
+        </div>
+        <div id="history-list" class="space-y-2 text-sm">
+          <div class="opacity-50 italic">Zatím prázdná. Každé "Zkopírovat" se zde uloží (max 20 záznamů, localStorage).</div>
+        </div>
+      </section>
+
+      <footer class="border-t border-base-300 pt-6 text-sm opacity-60 text-center">
+        <a class="link" href="https://code.claude.com/docs/en/deep-links" target="_blank" rel="noopener">Oficiální dokumentace</a>
+        ·
+        Styling: <a class="link" href="https://gitea.internal.ceosdata.com/asysta/act-design-system" target="_blank" rel="noopener">act-design-system Tier 0</a>
+      </footer>
+    </main>
+
+    <script>
+      const STORAGE_KEY = "claude-deeplink-history";
+      const MAX_HISTORY = 20;
+      const MAX_PROMPT = 5000;
+
+      const $prompt = document.getElementById("prompt");
+      const $repo = document.getElementById("repo");
+      const $cwd = document.getElementById("cwd");
+      const $urlOut = document.getElementById("url-output");
+      const $openLink = document.getElementById("open-link");
+      const $copyBtn = document.getElementById("copy-btn");
+      const $copyHtmlBtn = document.getElementById("copy-html-btn");
+      const $htmlAnchor = document.getElementById("html-anchor");
+      const $charCount = document.getElementById("char-count");
+      const $historyList = document.getElementById("history-list");
+
+      function getTarget() {
+        return document.querySelector('input[name="target"]:checked').value;
+      }
+
+      function buildUrl() {
+        const params = new URLSearchParams();
+        const target = getTarget();
+        if (target === "repo" && $repo.value.trim()) {
+          params.set("repo", $repo.value.trim());
+        } else if (target === "cwd" && $cwd.value.trim()) {
+          params.set("cwd", $cwd.value.trim());
+        }
+        if ($prompt.value) {
+          params.set("q", $prompt.value);
+        }
+        const qs = params.toString();
+        return qs ? `claude-cli://open?${qs}` : `claude-cli://open`;
+      }
+
+      function update() {
+        const target = getTarget();
+        document.querySelector('[data-field="repo"]').classList.toggle("hidden", target !== "repo");
+        document.querySelector('[data-field="cwd"]').classList.toggle("hidden", target !== "cwd");
+
+        const url = buildUrl();
+        const hasPrompt = $prompt.value.length > 0;
+        const hasTarget =
+          (target === "repo" && $repo.value.trim()) ||
+          (target === "cwd" && $cwd.value.trim());
+        const isEmpty = !hasPrompt && !hasTarget;
+
+        $urlOut.textContent = isEmpty ? "" : url;
+        if (isEmpty) {
+          $urlOut.innerHTML = '<span class="opacity-50">— vyplň formulář —</span>';
+        }
+
+        $openLink.href = url;
+        $openLink.toggleAttribute("aria-disabled", isEmpty);
+        $openLink.classList.toggle("btn-disabled", isEmpty);
+        $copyBtn.disabled = isEmpty;
+        $copyHtmlBtn.disabled = isEmpty;
+
+        const label = $prompt.value.trim().slice(0, 40) || "(no prompt)";
+        const anchor = `<a href="${url}">Open in Claude Code — ${escapeHtml(label)}</a>`;
+        $htmlAnchor.textContent = anchor;
+
+        $charCount.textContent = $prompt.value.length;
+        $charCount.classList.toggle("text-error", $prompt.value.length > MAX_PROMPT);
+      }
+
+      function escapeHtml(s) {
+        return s.replace(/[&<>"']/g, (c) => ({
+          "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+        }[c]));
+      }
+
+      async function copyUrl() {
+        const url = buildUrl();
+        await navigator.clipboard.writeText(url);
+        flashBtn($copyBtn, "Zkopírováno ✓");
+        saveToHistory(url);
+      }
+
+      async function copyHtmlAnchor() {
+        await navigator.clipboard.writeText($htmlAnchor.textContent);
+        flashBtn($copyHtmlBtn, "Zkopírováno ✓");
+      }
+
+      function flashBtn(btn, msg) {
+        const orig = btn.textContent;
+        btn.textContent = msg;
+        btn.classList.add("btn-success");
+        setTimeout(() => {
+          btn.textContent = orig;
+          btn.classList.remove("btn-success");
+        }, 1200);
+      }
+
+      function saveToHistory(url) {
+        const entry = {
+          url,
+          prompt: $prompt.value,
+          target: getTarget(),
+          repo: $repo.value,
+          cwd: $cwd.value,
+          ts: Date.now(),
+        };
+        const history = loadHistory();
+        history.unshift(entry);
+        const dedup = history.filter((e, i) => history.findIndex((x) => x.url === e.url) === i);
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(dedup.slice(0, MAX_HISTORY)));
+        renderHistory();
+      }
+
+      function loadHistory() {
+        try {
+          return JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
+        } catch {
+          return [];
+        }
+      }
+
+      function renderHistory() {
+        const history = loadHistory();
+        if (history.length === 0) {
+          $historyList.innerHTML =
+            '<div class="opacity-50 italic">Zatím prázdná. Každé "Zkopírovat" se zde uloží (max 20 záznamů, localStorage).</div>';
+          return;
+        }
+        $historyList.innerHTML = history
+          .map((e, i) => {
+            const when = new Date(e.ts).toLocaleString("cs-CZ");
+            const label = (e.prompt || "(no prompt)").slice(0, 80);
+            const target =
+              e.target === "repo" && e.repo
+                ? `repo: <code>${escapeHtml(e.repo)}</code>`
+                : e.target === "cwd" && e.cwd
+                ? `cwd: <code>${escapeHtml(e.cwd)}</code>`
+                : "<em>no target</em>";
+            return `
+              <div class="bg-base-100 border border-base-300 rounded-md p-3 flex items-start gap-3">
+                <div class="flex-1 min-w-0">
+                  <div class="font-mono text-xs truncate">${escapeHtml(label)}</div>
+                  <div class="text-xs opacity-60 mt-1">${when} · ${target}</div>
+                </div>
+                <div class="flex gap-1 shrink-0">
+                  <button class="btn btn-ghost btn-xs" onclick="restoreEntry(${i})">Načíst</button>
+                  <a class="btn btn-secondary btn-xs" href="${e.url}">Otevřít</a>
+                  <button class="btn btn-ghost btn-xs" onclick="deleteEntry(${i})">×</button>
+                </div>
+              </div>`;
+          })
+          .join("");
+      }
+
+      function restoreEntry(i) {
+        const e = loadHistory()[i];
+        if (!e) return;
+        $prompt.value = e.prompt || "";
+        $repo.value = e.repo || "";
+        $cwd.value = e.cwd || "";
+        document.querySelector(`input[name="target"][value="${e.target}"]`).checked = true;
+        update();
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      }
+
+      function deleteEntry(i) {
+        const history = loadHistory();
+        history.splice(i, 1);
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(history));
+        renderHistory();
+      }
+
+      function clearHistory() {
+        if (!confirm("Vymazat celou historii?")) return;
+        localStorage.removeItem(STORAGE_KEY);
+        renderHistory();
+      }
+
+      function loadSample(kind) {
+        if (kind === "review") {
+          $prompt.value = "/review";
+        } else if (kind === "status") {
+          $prompt.value = "Spusť git status a popiš mi, co se v repu změnilo od posledního commitu.";
+        } else if (kind === "multi") {
+          $prompt.value =
+            "Zkontroluj poslední commit:\n1. Najdi případné regrese\n2. Navrhni follow-up úkoly\n3. Zhodnoť test coverage";
+        }
+        update();
+      }
+
+      function resetForm() {
+        $prompt.value = "";
+        $repo.value = "";
+        $cwd.value = "";
+        document.querySelector('input[name="target"][value="repo"]').checked = true;
+        update();
+      }
+
+      function toggleTheme() {
+        const root = document.documentElement;
+        const next = root.dataset.theme === "dark" ? "light" : "dark";
+        root.dataset.theme = next;
+        document.querySelector("[data-theme-label]").textContent = next === "dark" ? "☀️" : "🌙";
+        localStorage.setItem("claude-deeplink-theme", next);
+      }
+
+      // wire events
+      [$prompt, $repo, $cwd].forEach((el) => el.addEventListener("input", update));
+      document.querySelectorAll('input[name="target"]').forEach((el) => el.addEventListener("change", update));
+
+      // init
+      const savedTheme = localStorage.getItem("claude-deeplink-theme");
+      if (savedTheme) {
+        document.documentElement.dataset.theme = savedTheme;
+        document.querySelector("[data-theme-label]").textContent = savedTheme === "dark" ? "☀️" : "🌙";
+      } else if (window.matchMedia?.("(prefers-color-scheme: dark)").matches) {
+        document.documentElement.dataset.theme = "dark";
+        document.querySelector("[data-theme-label]").textContent = "☀️";
+      }
+      renderHistory();
+      update();
+    </script>
+  </body>
+</html>
